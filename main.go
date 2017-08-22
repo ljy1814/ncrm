@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	httpPort = "18080"
-	listenIP = "localhost"
+	httpPort = "82"
+	listenIP = ""
 )
 
 func main() {
