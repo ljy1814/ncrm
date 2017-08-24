@@ -1,10 +1,14 @@
 package main
 
 import (
+	"ac-common-go/glog"
+	"ac-common-go/version"
+	"flag"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"time"
 )
 
@@ -14,8 +18,23 @@ var (
 )
 
 func main() {
+	ver := flag.Bool("version", false, "current version 1.0")
+	flag.Parse()
+	if *ver {
+		version.ShowVersion(false)
+		os.Exit(0)
+	}
+	version.ShowVersion(true)
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	server := NewHttpServer(listenIP, httpPort)
+	//	glog.SetLogLevel("INFO")
+	err := ReadConfig("./config.json")
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(1)
+	}
+	defer glog.Flush()
+	server := NewHttpServer(GetString(CrmConf["ServiceAddr"]), GetString(CrmConf["ServicePort"]))
 	server.Serve()
 }
 

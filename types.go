@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"reflect"
 	"time"
 )
@@ -132,4 +133,30 @@ func GetString(v interface{}) string {
 		return ""
 	}
 	return s
+}
+
+var (
+	envs = map[int64]string{
+		1: "dev",
+		2: "test",
+		3: "生产",
+		4: "华北环境",
+		5: "北美环境",
+		6: "欧洲环境",
+		7: "东南亚环境",
+	}
+)
+
+func ParseError(oriErr []byte) (errMsg string, code int64, err error) {
+	if len(oriErr) <= 0 {
+		return
+	}
+	var errMap map[string]interface{}
+	err = json.Unmarshal(oriErr, &errMap)
+	if err != nil {
+		return
+	}
+	errMsg = GetString(errMap["error"])
+	code = GetInt(errMap["errorCode"])
+	return
 }

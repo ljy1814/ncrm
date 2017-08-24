@@ -1,16 +1,14 @@
 package main
 
 import (
-	"ac-common-go/developer"
+	log "ac-common-go/glog"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
-	"time"
-
-	"github.com/fatih/color"
 )
 
 type DomainHandler struct {
@@ -20,87 +18,57 @@ func NewDomainHandler() *DomainHandler {
 	return &DomainHandler{}
 }
 
-func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Request) {
-	oUrl := r.URL
-	reqBody := r.Body
-	reqURI := r.RequestURI
-	oldDevSign := r.Header.Get("X-Zc-Developer-Signature")
-	defer func() {
-		r.Body = reqBody
-		r.URL = oUrl
-		r.RequestURI = reqURI
-		r.Header.Set("X-Zc-Developer-Signature", oldDevSign)
-	}()
-	r.Header.Set("X-Zc-Developer-Id", fmt.Sprintf("%d", SignDeveloperId))
-	r.Header.Set("X-Zc-Access-Key", AccessKey)
-	r.Header.Set("X-Zc-Major-Domain", "test_ac")
-	var err error
-	domain, domainId, developerId, err := getMajorDomain(r)
-	w.Write([]byte(fmt.Sprintf("domain: %v , domainId: %v, developerId: %v\r\n", domain, domainId, developerId)))
-
-	company, err := getDeveloper(r, fmt.Sprintf("%d", developerId))
-	if err != nil {
-		w.Write([]byte(fmt.Sprintf("internal error: %v\r\n", err)))
-	}
-	w.Write([]byte(fmt.Sprintf("company : %v\n", company)))
-
-	/*
-		allInfo, err := getAllProjects(r, fmt.Sprintf("%d", developerId))
-		if err != nil {
-			w.Write([]byte(fmt.Sprintf("%v\n", allInfo)))
-		}
-	*/
-}
-
-//func getMajorDomain(r *http.Request) (majorDomain interface{}, majorDomainId, developerId interface{}, err error) {
-func getMajorDomain(r *http.Request) (majorDomain string, majorDomainId, developerId int64, err error) {
+func getMajorDomain(r *http.Request) (majorDomain string, majorDomainId, developerId int64, acErr []byte, err error) {
 	if r.Method != "POST" {
 		return
 	}
 	var client http.Client
 	var resp *http.Response
+	var reqBody []byte
+	reqBody, err = ioutil.ReadAll(r.Body)
+	if err != nil {
+		return
+	}
+	var rbody map[string]interface{}
+	err = json.Unmarshal(reqBody, &rbody)
+	if err != nil {
+		return
+	}
+	majorDomainId = GetInt(rbody["majorDomainId"])
 	for _, host := range Hosts {
 		sUrl := "http://" + host + "/zc-platform/v1/getMajorDomain"
-		method := "getMajorDomain"
 		var req *http.Request
-		jbody := []byte(`{"majorDomainId":` + r.Header.Get("X-Zc-Major-Domain-Id") + `}`)
+		jbody := []byte(`{"majorDomainId":` + fmt.Sprintf("%d", majorDomainId) + `}`)
 		req, err = http.NewRequest("POST", sUrl, bytes.NewBuffer(jbody))
-		req.Header.Set("X-Zc-Developer-Id", fmt.Sprintf("%d", SignDeveloperId))
-		req.Header.Set("X-Zc-Access-Key", AccessKey)
-		req.Header.Set("X-Zc-Major-Domain", SignDomain)
-		var signature string
-		req.Header.Set("X-Zc-Timeout", r.Header.Get("X-Zc-Timeout"))
-		req.Header.Set("X-Zc-Timestamp", fmt.Sprintf("%d", time.Now().Unix()))
-		req.Header.Set("X-Zc-Nonce", r.Header.Get("X-Zc-Nonce"))
+		req.Header.Set("X-Zc-Developer-Id", "0")
+		req.Header.Set("X-Zc-Access-Mode", "1")
+		req.Header.Set("X-Zc-Major-Domain", GetString(CrmConf[host]))
 		req.Header.Set("Content-Type", "application/x-zc-object")
 
-		signature, err = genAccessSignature(req, method)
-		if err != nil || signature == "" {
-			color.Red("gen signature error: %v\n", err)
-			return
-		}
-		req.Header.Set("X-Zc-Developer-Signature", signature)
-
-		color.Blue("major domain req : %v\n", req)
 		resp, err = client.Do(req)
-		color.Yellow("resp: %v, err: %v\n", resp, err)
+		traceId := resp.Header.Get("X-Zc-Trace-Id")
 		if err != nil {
-			//TODO 检查error
-			color.Green("[%s] send request failed: err[%v]\n", host, err)
-			break
-		}
-		msgName := resp.Header.Get("X-Zc-Msg-Name")
-		if msgName == "X-Zc-Err" {
-			//TODO 请求错误
-			color.Green("[%s] get result failed: err[%v]\n", host, err)
-			continue
+			//TODO 检查error,请求发送失败
+			log.Warningf("TraceID[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+			return
 		}
 		defer resp.Body.Close()
 		var respBody []byte
 		respBody, err = ioutil.ReadAll(resp.Body)
-		color.Red("major domain respBody : %v\n", string(respBody))
 		if err != nil {
 			return
+		}
+		msgName := resp.Header.Get("X-Zc-Msg-Name")
+		if msgName == "X-Zc-Err" {
+			//TODO 请求错误
+			log.Warningf("TraceId[%s], [%s] get result failed: err[%v]\n", traceId, host, string(respBody))
+			errMsg, _, perr := ParseError(respBody)
+			if perr != nil {
+				break
+			}
+			err = errors.New(errMsg)
+			acErr = respBody
+			continue
 		}
 		var res map[string]interface{}
 		err = json.Unmarshal(respBody, &res)
@@ -113,8 +81,7 @@ func getMajorDomain(r *http.Request) (majorDomain string, majorDomainId, develop
 	}
 	return
 }
-
-func getDeveloper(r *http.Request, developerIdStr string) (company string, err error) {
+func getDeveloper(r *http.Request, domain, developerIdStr string) (company string, acErr []byte, err error) {
 	if r.Method != "POST" {
 		return
 	}
@@ -122,50 +89,43 @@ func getDeveloper(r *http.Request, developerIdStr string) (company string, err e
 	var resp *http.Response
 	for _, host := range Hosts {
 		sUrl := "http://" + host + "/zc-platform/v1/getDeveloper"
-		method := "getDeveloper"
 		jbody := []byte(`{"developerId":` + developerIdStr + `}`)
-		//rbody := bytes.NewBuffer(jbody)
 		var req *http.Request
 		req, err = http.NewRequest("POST", sUrl, bytes.NewBuffer(jbody))
-		req.Header.Set("X-Zc-Developer-Id", fmt.Sprintf("%d", SignDeveloperId))
-		req.Header.Set("X-Zc-Access-Key", AccessKey)
-		req.Header.Set("X-Zc-Major-Domain", SignDomain)
-		var signature string
-		req.Header.Set("X-Zc-Timeout", r.Header.Get("X-Zc-Timeout"))
-		req.Header.Set("X-Zc-Timestamp", fmt.Sprintf("%d", time.Now().Unix()))
-		req.Header.Set("X-Zc-Nonce", r.Header.Get("X-Zc-Nonce"))
+		req.Header.Set("X-Zc-Developer-Id", developerIdStr)
+		req.Header.Set("X-Zc-Access-Mode", "1")
+		req.Header.Set("X-Zc-Major-Domain", domain)
 		req.Header.Set("Content-Type", "application/x-zc-object")
 
-		signature, err = genAccessSignature(req, method)
-		if err != nil || signature == "" {
-			color.Red("gen signature error: %v\n", err)
-			return
-		}
-		req.Header.Set("X-Zc-Developer-Signature", signature)
-
-		color.Blue("major domain req : %v\n", req)
 		resp, err = client.Do(req)
-		color.Yellow("resp: %v, err: %v\n", resp, err)
+		traceId := resp.Header.Get("X-Zc-Trace-Id")
 		if err != nil {
 			//TODO 检查error
-			color.Green("[%s] send request failed: err[%v]\n", host, err)
+			log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
 			break
-		}
-		msgName := resp.Header.Get("Z-Zc-Msg-Name")
-		if msgName == "X-Zc-Err" {
-			color.Green("[%s] get result failed: err[%v]\n", host, err)
-			continue
 		}
 		defer resp.Body.Close()
 		var respBody []byte
 		respBody, err = ioutil.ReadAll(resp.Body)
-		color.Red("developer respBody : %v\n", string(respBody))
 		if err != nil {
 			return
+		}
+		msgName := resp.Header.Get("X-Zc-Msg-Name")
+		if msgName == "X-Zc-Err" {
+			//TODO 请求错误
+			log.Warningf("TraceId[%s], [%s] get result failed: err[%v]\n", traceId, host, string(respBody))
+			errMsg, _, perr := ParseError(respBody)
+			if perr != nil {
+				break
+			}
+			err = errors.New(errMsg)
+			acErr = respBody
+			continue
 		}
 		var res map[string]interface{}
 		err = json.Unmarshal(respBody, &res)
 		if err == nil {
+			acErr = nil
 			company = GetString(res["company"])
 			return
 		}
@@ -173,7 +133,7 @@ func getDeveloper(r *http.Request, developerIdStr string) (company string, err e
 	return
 }
 
-func getAllProjects(r *http.Request, developerIdStr string) (allInfo map[int64][]ProjectEntry, err error) {
+func getAllProjects(r *http.Request, domain, developerIdStr string) (allInfo map[int64][]ProjectEntry, acErr []byte, err error) {
 	if r.Method != "POST" {
 		return
 	}
@@ -183,51 +143,37 @@ func getAllProjects(r *http.Request, developerIdStr string) (allInfo map[int64][
 	for k, host := range Hosts {
 		sUrl := "http://" + host + "/zc-platform/v1/getAllProjects"
 		var req *http.Request
-		method := "getAllProjects"
-		msgName := resp.Header.Get("Z-Zc-Msg-Name")
-		if msgName == "X-Zc-Err" {
-			color.Green("[%s] get result failed: err[%v]\n", host, err)
-			continue
-		}
 		jbody := []byte(`{"developerId":` + developerIdStr + `}`)
-		//rbody := bytes.NewBuffer(jbody)
-		var req *http.Request
 		req, err = http.NewRequest("POST", sUrl, bytes.NewBuffer(jbody))
-		req.Header.Set("X-Zc-Developer-Id", fmt.Sprintf("%d", SignDeveloperId))
-		req.Header.Set("X-Zc-Access-Key", AccessKey)
-		req.Header.Set("X-Zc-Major-Domain", SignDomain)
-		var signature string
-		req.Header.Set("X-Zc-Timeout", r.Header.Get("X-Zc-Timeout"))
-		req.Header.Set("X-Zc-Timestamp", fmt.Sprintf("%d", time.Now().Unix()))
-		req.Header.Set("X-Zc-Nonce", r.Header.Get("X-Zc-Nonce"))
+		req.Header.Set("X-Zc-Developer-Id", developerIdStr)
+		req.Header.Set("X-Zc-Access-Mode", "1")
+		req.Header.Set("X-Zc-Major-Domain", domain)
 		req.Header.Set("Content-Type", "application/x-zc-object")
 
-		signature, err = genAccessSignature(req, method)
-		if err != nil || signature == "" {
-			color.Red("gen signature error: %v\n", err)
-			return
-		}
-		req.Header.Set("X-Zc-Developer-Signature", signature)
-
-		color.Blue("major domain req : %v\n", req)
 		resp, err = client.Do(req)
-		color.Yellow("resp: %v, err: %v\n", resp, err)
+		traceId := resp.Header.Get("X-Zc-Trace-Id")
 		if err != nil {
 			//TODO 检查error
-			color.Green("[%s] send request failed: err[%v]\n", host, err)
+			log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
 			break
-		}
-		msgName := resp.Header.Get("Z-Zc-Msg-Name")
-		if msgName == "X-Zc-Err" {
-			color.Green("[%s] get result failed: err[%v]\n", host, err)
-			continue
 		}
 		defer resp.Body.Close()
 		var respBody []byte
 		respBody, err = ioutil.ReadAll(resp.Body)
-		color.Red("respBody : %v\n", string(respBody))
 		if err != nil {
 			return
+		}
+		msgName := resp.Header.Get("X-Zc-Msg-Name")
+		if msgName == "X-Zc-Err" {
+			//TODO 请求错误
+			log.Warningf("TraceId[%s], [%s] get result failed: err[%v]\n", traceId, host, string(respBody))
+			errMsg, _, perr := ParseError(respBody)
+			if perr != nil {
+				break
+			}
+			err = errors.New(errMsg)
+			acErr = respBody
+			continue
 		}
 		info := make([]ProjectEntry, 0)
 		err = json.Unmarshal(respBody, &info)
@@ -235,29 +181,358 @@ func getAllProjects(r *http.Request, developerIdStr string) (allInfo map[int64][
 
 			return
 		}
+		acErr = nil
 		allInfo[k] = info
 	}
 	return
 }
+func getAccountCount(r *http.Request, domain, developerIdStr string) (accountCount int64, acErr []byte, err error) {
+	if r.Method != "POST" {
+		return
+	}
+	var client http.Client
+	var resp *http.Response
+	for _, host := range Hosts {
+		sUrl := "http://" + host + "/zc-account/v1/getAccountCount"
+		var req *http.Request
+		req, err = http.NewRequest("POST", sUrl, nil)
+		req.Header.Set("X-Zc-Developer-Id", developerIdStr)
+		req.Header.Set("X-Zc-Access-Mode", "1")
+		req.Header.Set("X-Zc-Major-Domain", domain)
+		req.Header.Set("Content-Type", "application/x-zc-object")
 
-func genAccessSignature(r *http.Request, method string) (signature string, err error) {
+		resp, err = client.Do(req)
+		traceId := resp.Header.Get("X-Zc-Trace-Id")
+		if err != nil {
+			//TODO 检查error
+			log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+			break
+		}
+		defer resp.Body.Close()
+		var respBody []byte
+		respBody, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return
+		}
+		msgName := resp.Header.Get("X-Zc-Msg-Name")
+		if msgName == "X-Zc-Err" {
+			//TODO 请求错误
+			log.Warningf("TraceId[%s], [%s] get result failed: err[%v]\n", traceId, host, string(respBody))
+			errMsg, _, perr := ParseError(respBody)
+			if perr != nil {
+				break
+			}
+			err = errors.New(errMsg)
+			acErr = respBody
+			continue
+		}
+		var res map[string]interface{}
+		err = json.Unmarshal(respBody, &res)
+		if err == nil {
+			acErr = nil
+			accountCount += GetInt(res["count"])
+		}
+	}
+	return
+}
+func getProduct(r *http.Request, host, domain, subDomain, developerIdStr string) (product Product, acErr []byte, err error) {
+	if r.Method != "POST" {
+		return
+	}
+	var client http.Client
+	var resp *http.Response
+	sUrl := "http://" + host + "/zc-product/v1/getProduct"
+	var req *http.Request
+	req, err = http.NewRequest("POST", sUrl, nil)
+	req.Header.Set("X-Zc-Developer-Id", developerIdStr)
+	req.Header.Set("X-Zc-User-Id", "0")
+	req.Header.Set("X-Zc-Inner-Service", "")
+	req.Header.Set("X-Zc-Access-Mode", "1")
+	req.Header.Set("X-Zc-Major-Domain", domain)
+	req.Header.Set("X-Zc-Sub-Domain", subDomain)
+	req.Header.Set("Content-Type", "application/x-zc-object")
 
-	signer := developer.Signer{}
-	signer.DeveloperId = int64(SignDeveloperId)
+	resp, err = client.Do(req)
+	traceId := resp.Header.Get("X-Zc-Trace-Id")
+	if err != nil {
+		//TODO 检查error
+		log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+		return
+	}
+	defer resp.Body.Close()
+	var respBody []byte
+	respBody, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return
 	}
-	signer.MajorDomain = "test_ac"
-	//	signer.MajorDomain = r.Header.Get("X-Zc-Major-Domain")
-	//	signer.SubDomain = r.Header.Get("X-Zc-Sub-Domain")
-	signer.Timestamp, err = strconv.ParseInt(r.Header.Get("X-Zc-Timestamp"), 10, 64)
+	msgName := resp.Header.Get("X-Zc-Msg-Name")
+	if msgName == "X-Zc-Err" {
+		//TODO 请求错误
+		log.Warningf("TraceId[%s], [%s] get result failed: err[%v]\n", traceId, host, string(respBody))
+		errMsg, _, perr := ParseError(respBody)
+		if perr != nil {
+			return
+		}
+		err = errors.New(errMsg)
+		acErr = respBody
+		return
+	}
+	var res map[string]Product
+	err = json.Unmarshal(respBody, &res)
+	if err == nil {
+		product = res["product"]
+		return
+	}
+	return
+}
+func getLicenseQuota(r *http.Request, host, domain, subDomain, developerIdStr string) (lq LicenseQuotaInfo, acErr []byte, err error) {
+	if r.Method != "POST" {
+		return
+	}
+	var client http.Client
+	var resp *http.Response
+	sUrl := "http://" + host + "/zc-warehouse/v1/getLicenseQuota"
+	var req *http.Request
+	req, err = http.NewRequest("POST", sUrl, nil)
+	req.Header.Set("X-Zc-Developer-Id", developerIdStr)
+	req.Header.Set("X-Zc-Access-Mode", "1")
+	req.Header.Set("X-Zc-Major-Domain", domain)
+	req.Header.Set("X-Zc-Sub-Domain", subDomain)
+	req.Header.Set("Content-Type", "application/x-zc-object")
+
+	resp, err = client.Do(req)
+	traceId := resp.Header.Get("X-Zc-Trace-Id")
+	if err != nil {
+		//TODO 检查error
+		log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+		return
+	}
+	defer resp.Body.Close()
+	var respBody []byte
+	respBody, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return
 	}
-	signer.Timeout, err = strconv.ParseInt(r.Header.Get("X-Zc-timeout"), 10, 64)
-	signer.Nonce = r.Header.Get("X-Zc-Nonce")
-	signer.Method = method
+	msgName := resp.Header.Get("X-Zc-Msg-Name")
+	if msgName == "X-Zc-Err" {
+		//TODO 请求错误
+		log.Warningf("TraceId[%s], [%s] get result failed: err[%v]\n", traceId, host, string(respBody))
+		errMsg, _, perr := ParseError(respBody)
+		if perr != nil {
+			return
+		}
+		err = errors.New(errMsg)
+		acErr = respBody
+		return
+	}
+	err = json.Unmarshal(respBody, &lq)
+	if err != nil {
+		return
+	}
+	return
+}
+func getSubDomain(r *http.Request, host, domain, subDomain, developerIdStr string) (info SubDomainEntry, acErr []byte, err error) {
+	sUrl := "http://" + host + "/zc-platform/v1/getSubDomain"
+	jbody := []byte(`{"subDomainId":` + subDomain + `}`)
+	var req *http.Request
+	var resp *http.Response
+	client := http.Client{}
+	req, err = http.NewRequest("POST", sUrl, bytes.NewBuffer(jbody))
+	req.Header.Set("X-Zc-Developer-Id", developerIdStr)
+	req.Header.Set("X-Zc-Access-Mode", "1")
+	req.Header.Set("X-Zc-Major-Domain", domain)
+	req.Header.Set("X-Zc-Sub-Domain-Id", subDomain)
+	req.Header.Set("Content-Type", "application/x-zc-object")
 
-	return signer.Sign(SecretKey)
+	resp, err = client.Do(req)
+	traceId := resp.Header.Get("X-Zc-Trace-Id")
+	if err != nil {
+		//TODO 检查error
+		log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+		return
+	}
+	defer resp.Body.Close()
+	var respBody []byte
+	respBody, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	msgName := resp.Header.Get("X-Zc-Msg-Name")
+	if msgName == "X-Zc-Err" {
+		//TODO 请求错误
+		log.Warningf("TraceId[%s], [%s] get result failed: err[%v]\n", traceId, host, string(respBody))
+		errMsg, _, perr := ParseError(respBody)
+		if perr != nil {
+			return
+		}
+		err = errors.New(errMsg)
+		acErr = respBody
+		return
+	}
+	err = json.Unmarshal(respBody, &info)
+	if err != nil {
+		return
+	}
 
+	return
+}
+
+func getDeviceCount(r *http.Request, host, domain, subDomain, developerIdStr string) (count, deviceCount int64, acErr []byte, err error) {
+	if r.Method != "POST" {
+		return
+	}
+	var client http.Client
+	var resp *http.Response
+	for _, host := range Hosts {
+		sUrl := "http://" + host + "/zc-warehouse/v1/getDeviceCount"
+		jbody := []byte(`{"developerId":` + developerIdStr + `}`)
+		var req *http.Request
+		req, err = http.NewRequest("POST", sUrl, bytes.NewBuffer(jbody))
+		req.Header.Set("X-Zc-Developer-Id", fmt.Sprintf("%d", SignDeveloperId))
+		req.Header.Set("X-Zc-Access-Mode", "1")
+		req.Header.Set("X-Zc-Major-Domain", domain)
+		req.Header.Set("X-Zc-Sub-Domain", subDomain)
+		req.Header.Set("Content-Type", "application/x-zc-object")
+
+		resp, err = client.Do(req)
+		traceId := resp.Header.Get("X-Zc-Trace-Id")
+		defer resp.Body.Close()
+		var respBody []byte
+		respBody, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return
+		}
+		msgName := resp.Header.Get("X-Zc-Msg-Name")
+		if msgName == "X-Zc-Err" {
+			//TODO 请求错误
+			log.Warningf("TraceId[%s], [%s] get result failed: err[%v]\n", traceId, host, string(respBody))
+			errMsg, _, perr := ParseError(respBody)
+			if perr != nil {
+				break
+			}
+			err = errors.New(errMsg)
+			acErr = respBody
+			return
+		}
+		var res map[string]interface{}
+		err = json.Unmarshal(respBody, &res)
+		if err != nil {
+			return
+		}
+		count = GetInt(res["count"])
+		deviceCount = GetInt(res["deviceCount"])
+	}
+	return
+}
+
+func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Request) {
+	var amp AllMajorInfo
+
+	domain, domainId, developerId, acErr, err := getMajorDomain(r)
+	if err != nil {
+		writeError(acErr, w)
+		return
+	}
+	if domainId <= 0 || domain == "" {
+		writeError(nil, w)
+		return
+	}
+	amp.MajorInfo.MajorDomainId = domainId
+	amp.MajorInfo.MajorDomain = domain
+
+	developerIdStr := fmt.Sprintf("%d", developerId)
+
+	company, acErr, err := getDeveloper(r, domain, fmt.Sprintf("%d", developerId))
+	if err != nil {
+		writeError(acErr, w)
+		return
+	}
+	amp.MajorInfo.CompanyName = company
+
+	accounts, acErr, err := getAccountCount(r, domain, fmt.Sprintf("%d", developerId))
+	if err != nil {
+		writeError(acErr, w)
+		return
+	}
+	amp.MajorInfo.AccountCount = accounts
+
+	//var projects []lcommon.ProjectEntry
+	allProjects, acErr, err := getAllProjects(r, domain, fmt.Sprintf("%d", developerId))
+	if err != nil {
+		writeError(acErr, w)
+		return
+	}
+	//TODO 暂时还在测试获取所属环境的接口
+	//　所有环境的产品
+	for k, projects := range allProjects {
+		//某个环境的所有产品
+		for _, v := range projects {
+			var pi ProductInfo
+			pi.ProductName = v.Name
+			pi.SubDomainId = v.SubDomainId
+			subDomainIdStr := strconv.Itoa(int(v.SubDomainId))
+			subDm, acErr, err := getSubDomain(r, Hosts[k], domain, subDomainIdStr, developerIdStr)
+			if err != nil {
+				writeError(acErr, w)
+				return
+			}
+			//			plm, err := this.productClient.GetProduct(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
+			plm, acErr, err := getProduct(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
+			if err != nil {
+				log.WarningfT(nil, "get product failed: domain[%s], subdomain[%d], developerId[%d] err[%v]", domain, pi.SubDomainId, developerId, err)
+				writeError(acErr, w)
+				return
+			}
+			pi.LicenseMode = plm.LicenseMode
+			//TODO 错误处理,直接忽略?
+			//	lq, err := this.warehouseClient.GetLicenseQuota(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
+			lq, acErr, err := getLicenseQuota(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
+			amp.MajorInfo.AllLicenseCount += lq.QuotaTotal
+			amp.MajorInfo.AllLicenseAllocated += lq.QuotaUsed
+			pi.LicenseAllocated = lq.QuotaUsed
+			if err != nil {
+				writeError(acErr, w)
+				return
+			}
+
+			//			count, activeCount, err := this.warehouseClient.GetDeviceCount(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
+			count, activeCount, acErr, err := getDeviceCount(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
+			pi.DeviceImport = count
+			pi.DeviceActived = activeCount
+			amp.MajorInfo.AllDeviceImport += count
+			amp.MajorInfo.AllDeviceActived += activeCount
+			if err != nil {
+				writeError(acErr, w)
+				return
+			}
+
+			pi.Environment = envs[k]
+			//TODO 环境
+			amp.Products = append(amp.Products, &pi)
+		}
+	}
+
+	jamp, err := json.Marshal(amp)
+	if err != nil {
+		writeError([]byte(err.Error()), w)
+		return
+	}
+	//	resp.SetPayload(jamp, zc.ZC_MSG_PAYLOAD_JSON)
+	w.Header().Set("Content-Type", "text/json")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jamp)))
+	w.Header().Set("X-Zc-Content-Length", fmt.Sprintf("%d", len(jamp)))
+	w.Header().Set("X-Zc-Msg-Name", ZC_MSG_NAME_ACK)
+	w.Write(jamp)
+}
+
+func writeError(err []byte, w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/json")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(err)))
+	w.Header().Set("X-Zc-Content-Length", fmt.Sprintf("%d", len(err)))
+	w.Header().Set("X-Zc-Msg-Name", ZC_MSG_NAME_ERR)
+	if len(err) <= 0 {
+		w.Write([]byte(`{"error":"internal error", "errorCode":3000}`))
+	} else {
+		w.Write(err)
+	}
 }
