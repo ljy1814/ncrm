@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"reflect"
 	"time"
 )
 
@@ -81,82 +79,4 @@ type LicenseQuotaInfo struct {
 	QuotaTotal   int64 `json:"quotaTotal"`
 	QuotaRemains int64 `json:"quotaRemains"`
 	QuotaUsed    int64 `json:"quotaUsed"`
-}
-
-func GetInt(v interface{}) int64 {
-	if v == nil {
-		return 0
-	}
-	kind := reflect.TypeOf(v).Kind()
-	switch kind {
-	case reflect.Int:
-		return int64(v.(int))
-	case reflect.Int64:
-		return int64(v.(int64))
-	case reflect.Int8:
-		return int64(v.(int8))
-	case reflect.Int16:
-		return int64(v.(int16))
-	case reflect.Int32:
-		return int64(v.(int32))
-	case reflect.Uint:
-		return int64(v.(uint))
-	case reflect.Uint8:
-		return int64(v.(uint8))
-	case reflect.Uint16:
-		return int64(v.(uint16))
-	case reflect.Uint32:
-		return int64(v.(uint32))
-	case reflect.Uint64:
-		return int64(v.(uint64))
-	case reflect.Float32:
-		return int64(v.(float32))
-	case reflect.Float64:
-		return int64(v.(float64))
-	}
-	return 0
-}
-func GetFloat(v interface{}) float64 {
-	if v == nil {
-		return 0
-	}
-	switch reflect.TypeOf(v).Kind() {
-	case reflect.Float64, reflect.Float32:
-		return v.(float64)
-	default:
-		return 0
-	}
-}
-func GetString(v interface{}) string {
-	s, ok := v.(string)
-	if !ok {
-		return ""
-	}
-	return s
-}
-
-var (
-	envs = map[int64]string{
-		1: "dev",
-		2: "test",
-		3: "生产",
-		4: "华北环境",
-		5: "北美环境",
-		6: "欧洲环境",
-		7: "东南亚环境",
-	}
-)
-
-func ParseError(oriErr []byte) (errMsg string, code int64, err error) {
-	if len(oriErr) <= 0 {
-		return
-	}
-	var errMap map[string]interface{}
-	err = json.Unmarshal(oriErr, &errMap)
-	if err != nil {
-		return
-	}
-	errMsg = GetString(errMap["error"])
-	code = GetInt(errMap["errorCode"])
-	return
 }

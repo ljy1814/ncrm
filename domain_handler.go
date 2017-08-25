@@ -491,8 +491,8 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 			amp.MajorInfo.AllLicenseAllocated += lq.QuotaUsed
 			pi.LicenseAllocated = lq.QuotaUsed
 			if err != nil {
-				writeError(acErr, w)
-				return
+				//				writeError(acErr, w)
+				//		return
 			}
 
 			//			count, activeCount, err := this.warehouseClient.GetDeviceCount(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
@@ -523,16 +523,4 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("X-Zc-Content-Length", fmt.Sprintf("%d", len(jamp)))
 	w.Header().Set("X-Zc-Msg-Name", ZC_MSG_NAME_ACK)
 	w.Write(jamp)
-}
-
-func writeError(err []byte, w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/json")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(err)))
-	w.Header().Set("X-Zc-Content-Length", fmt.Sprintf("%d", len(err)))
-	w.Header().Set("X-Zc-Msg-Name", ZC_MSG_NAME_ERR)
-	if len(err) <= 0 {
-		w.Write([]byte(`{"error":"internal error", "errorCode":3000}`))
-	} else {
-		w.Write(err)
-	}
 }

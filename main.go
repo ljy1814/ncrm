@@ -12,11 +12,6 @@ import (
 	"time"
 )
 
-var (
-	httpPort = "82"
-	listenIP = ""
-)
-
 func main() {
 	ver := flag.Bool("version", false, "current version 1.0")
 	flag.Parse()

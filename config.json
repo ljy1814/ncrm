@@ -3,6 +3,7 @@
     "ServiceAddr":"",
     "ServicePort":"82",
     "sandbox.ablecloud.cn:5000":"test_ac",
+    "test.ablecloud.cn:5000":"hewei_ac",
     "router.ablecloud.cn:5000":"hewei_ac",
     "eurouter.ablecloud.cn:5000":"hewei_ac",
     "earouter.ablecloud.cn:5000":"hewei_ac",
