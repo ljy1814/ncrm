@@ -10,10 +10,10 @@ var (
 			7: "东南亚",
 	*/
 	Hosts = map[int64]string{
-		//5: "usrouter.ablecloud.cn:5000",
-		//4: "router.ablecloud.cn:5000",
-		//6: "eurouter.ablecloud.cn:5000",
-		//7: "earouter.ablecloud.cn:5000",
+		5: "usrouter.ablecloud.cn:5000",
+		4: "router.ablecloud.cn:5000",
+		6: "eurouter.ablecloud.cn:5000",
+		7: "earouter.ablecloud.cn:5000",
 		2: "test.ablecloud.cn:5000",
 		//		1: "sandbox.ablecloud.cn:5000",
 	}

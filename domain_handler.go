@@ -49,7 +49,7 @@ func getMajorDomain(r *http.Request) (majorDomain string, majorDomainId, develop
 		traceId := resp.Header.Get("X-Zc-Trace-Id")
 		if err != nil {
 			//TODO 检查error,请求发送失败
-			log.Warningf("TraceID[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+			log.Fatalf("TraceID[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
 			return
 		}
 		defer resp.Body.Close()
@@ -101,7 +101,7 @@ func getDeveloper(r *http.Request, domain, developerIdStr string) (company strin
 		traceId := resp.Header.Get("X-Zc-Trace-Id")
 		if err != nil {
 			//TODO 检查error
-			log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+			log.Fatalf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
 			break
 		}
 		defer resp.Body.Close()
@@ -154,7 +154,7 @@ func getAllProjects(r *http.Request, domain, developerIdStr string) (allInfo map
 		traceId := resp.Header.Get("X-Zc-Trace-Id")
 		if err != nil {
 			//TODO 检查error
-			log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+			log.Fatalf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
 			break
 		}
 		defer resp.Body.Close()
@@ -205,7 +205,7 @@ func getAccountCount(r *http.Request, domain, developerIdStr string) (accountCou
 		traceId := resp.Header.Get("X-Zc-Trace-Id")
 		if err != nil {
 			//TODO 检查error
-			log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+			log.Fatalf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
 			break
 		}
 		defer resp.Body.Close()
@@ -256,7 +256,7 @@ func getProduct(r *http.Request, host, domain, subDomain, developerIdStr string)
 	traceId := resp.Header.Get("X-Zc-Trace-Id")
 	if err != nil {
 		//TODO 检查error
-		log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+		log.Fatalf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -304,7 +304,7 @@ func getLicenseQuota(r *http.Request, host, domain, subDomain, developerIdStr st
 	traceId := resp.Header.Get("X-Zc-Trace-Id")
 	if err != nil {
 		//TODO 检查error
-		log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+		log.Fatalf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -348,7 +348,7 @@ func getSubDomain(r *http.Request, host, domain, subDomain, developerIdStr strin
 	traceId := resp.Header.Get("X-Zc-Trace-Id")
 	if err != nil {
 		//TODO 检查error
-		log.Warningf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
+		log.Fatalf("TraceId[%s], [%s] send request failed: err[%v]\n", traceId, host, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -395,6 +395,11 @@ func getDeviceCount(r *http.Request, host, domain, subDomain, developerIdStr str
 		req.Header.Set("Content-Type", "application/x-zc-object")
 
 		resp, err = client.Do(req)
+		if err != nil {
+			//TODO 检查error
+			log.Fatalf("[%s] send request failed: err[%v]\n", host, err)
+			return
+		}
 		traceId := resp.Header.Get("X-Zc-Trace-Id")
 		defer resp.Body.Close()
 		var respBody []byte
@@ -473,8 +478,9 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 			subDomainIdStr := strconv.Itoa(int(v.SubDomainId))
 			subDm, acErr, err := getSubDomain(r, Hosts[k], domain, subDomainIdStr, developerIdStr)
 			if err != nil {
-				writeError(acErr, w)
-				return
+				//writeError(acErr, w)
+				//return
+				continue
 			}
 			//			plm, err := this.productClient.GetProduct(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
 			plm, acErr, err := getProduct(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
@@ -489,21 +495,27 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 			lq, acErr, err := getLicenseQuota(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
 			amp.MajorInfo.AllLicenseCount += lq.QuotaTotal
 			amp.MajorInfo.AllLicenseAllocated += lq.QuotaUsed
-			pi.LicenseAllocated = lq.QuotaUsed
 			if err != nil {
 				//				writeError(acErr, w)
 				//		return
+				pi.LicenseAllocated = -1
+			} else {
+				pi.LicenseAllocated = lq.QuotaUsed
 			}
 
 			//			count, activeCount, err := this.warehouseClient.GetDeviceCount(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
 			count, activeCount, acErr, err := getDeviceCount(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
-			pi.DeviceImport = count
-			pi.DeviceActived = activeCount
 			amp.MajorInfo.AllDeviceImport += count
 			amp.MajorInfo.AllDeviceActived += activeCount
 			if err != nil {
-				writeError(acErr, w)
-				return
+				//				writeError(acErr, w)
+				//				return
+
+				pi.DeviceImport = -1
+				pi.DeviceActived = -1
+			} else {
+				pi.DeviceImport = count
+				pi.DeviceActived = activeCount
 			}
 
 			pi.Environment = envs[k]
