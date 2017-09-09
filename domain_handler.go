@@ -431,6 +431,10 @@ func getDeviceCount(r *http.Request, host, domain, subDomain, developerIdStr str
 }
 
 func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Request) {
+	if !checkContext(r) {
+		writeError([]byte("bad signature"), w)
+		return
+	}
 	var amp AllMajorInfo
 
 	domain, domainId, developerId, acErr, err := getMajorDomain(r)
