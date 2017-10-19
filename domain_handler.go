@@ -45,7 +45,7 @@ func getMajorDomain(r *http.Request) (majorDomain string, majorDomainId, develop
 		req, err = http.NewRequest("POST", sUrl, bytes.NewBuffer(jbody))
 		req.Header.Set("X-Zc-Developer-Id", "0")
 		req.Header.Set("X-Zc-Access-Mode", "1")
-		req.Header.Set("X-Zc-Major-Domain", GetString(CrmConf[host]))
+		req.Header.Set("X-Zc-Major-Domain", CrmConf.MajorDomains[host])
 		req.Header.Set("Content-Type", "application/x-zc-object")
 
 		resp, err = client.Do(req)
@@ -456,6 +456,21 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 	if !checkContext(r) {
 		writeError([]byte("bad signature"), w)
 		return
+	}
+	env := getListDomainEnv(r)
+	if env <= 0 {
+		writeError([]byte("invalid environment"), w)
+		return
+	}
+	Hosts = make(map[int64]string)
+	if env == ENV_SANDBOX {
+		Hosts = map[int64]string{1: CrmConf.Servers[1]}
+	} else {
+		for k, v := range CrmConf.Servers {
+			if k != 1 {
+				Hosts[k] = v
+			}
+		}
 	}
 	var amp AllMajorInfo
 

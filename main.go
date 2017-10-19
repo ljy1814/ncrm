@@ -29,7 +29,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer glog.Flush()
-	server := NewHttpServer(GetString(CrmConf["ServiceAddr"]), GetString(CrmConf["ServicePort"]))
+	server := NewHttpServer(CrmConf.ServiceAddr, CrmConf.ServicePort)
 	server.Serve()
 }
 

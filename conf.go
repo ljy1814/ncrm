@@ -7,19 +7,22 @@ import (
 )
 
 type NCrmConf struct {
-	Filename      string
-	ServiceName   string
-	ServiceAddr   string
-	ServicePort   string
-	SandboxMajor  string
-	TestMajor     string
-	RouterMajor   string
-	EurouterMajor string
-	UsrouterMajor string
-	EarouterMajor string
+	Filename     string
+	ServiceName  string
+	ServiceAddr  string
+	ServicePort  string
+	MajorDomains map[string]string `json:"major_domains"`
+	//	SandboxMajor  string
+	//	TestMajor     string
+	//	RouterMajor   string
+	//	EurouterMajor string
+	//	UsrouterMajor string
+	//	EarouterMajor string
+	Servers map[int64]string `json:"servers"`
 }
 
-var CrmConf map[string]interface{}
+//var CrmConf map[string]interface{}
+var CrmConf NCrmConf
 
 func ReadConfig(filename string) error {
 	file, err := os.Open(filename)
