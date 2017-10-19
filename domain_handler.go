@@ -22,6 +22,9 @@ func getMajorDomain(r *http.Request) (majorDomain string, majorDomainId, develop
 	if r.Method != "POST" {
 		return
 	}
+	defer func() {
+		log.Infof("get result : majorDomain=%v , majorDomainId = %v , developerId=%v\n", majorDomain, majorDomainId, developerId)
+	}()
 	var client http.Client
 	var resp *http.Response
 	var reqBody []byte
@@ -85,6 +88,9 @@ func getDeveloper(r *http.Request, domain, developerIdStr string) (company strin
 	if r.Method != "POST" {
 		return
 	}
+	defer func() {
+		log.Infof("get result : company=%v\n", company)
+	}()
 	var client http.Client
 	var resp *http.Response
 	for _, host := range Hosts {
@@ -160,6 +166,7 @@ func getAllProjects(r *http.Request, domain, developerIdStr string) (allInfo map
 		defer resp.Body.Close()
 		var respBody []byte
 		respBody, err = ioutil.ReadAll(resp.Body)
+		log.Infof("get result  : project=%v\n", string(respBody))
 		if err != nil {
 			return
 		}
@@ -190,6 +197,9 @@ func getAccountCount(r *http.Request, domain, developerIdStr string) (accountCou
 	if r.Method != "POST" {
 		return
 	}
+	defer func() {
+		log.Infof("get result : account = %v\n", accountCount)
+	}()
 	var client http.Client
 	var resp *http.Response
 	for _, host := range Hosts {
@@ -239,6 +249,9 @@ func getProduct(r *http.Request, host, domain, subDomain, developerIdStr string)
 	if r.Method != "POST" {
 		return
 	}
+	defer func() {
+		log.Infof("get result : product = %v\n", product)
+	}()
 	var client http.Client
 	var resp *http.Response
 	sUrl := "http://" + host + "/zc-product/v1/getProduct"
@@ -289,6 +302,9 @@ func getLicenseQuota(r *http.Request, host, domain, subDomain, developerIdStr st
 	if r.Method != "POST" {
 		return
 	}
+	defer func() {
+		log.Infof("get result : licenseQuoraInfo =　%v\n", lq)
+	}()
 	var client http.Client
 	var resp *http.Response
 	sUrl := "http://" + host + "/zc-warehouse/v1/getLicenseQuota"
@@ -334,6 +350,9 @@ func getLicenseQuota(r *http.Request, host, domain, subDomain, developerIdStr st
 func getSubDomain(r *http.Request, host, domain, subDomain, developerIdStr string) (info SubDomainEntry, acErr []byte, err error) {
 	sUrl := "http://" + host + "/zc-platform/v1/getSubDomain"
 	jbody := []byte(`{"subDomainId":` + subDomain + `}`)
+	defer func() {
+		log.Infof("get result : subDomain = %v\n", info)
+	}()
 	var req *http.Request
 	var resp *http.Response
 	client := http.Client{}
@@ -381,52 +400,55 @@ func getDeviceCount(r *http.Request, host, domain, subDomain, developerIdStr str
 	if r.Method != "POST" {
 		return
 	}
+	defer func() {
+		log.Infof("get result : count = %v , deviceCount = %v\n", count, deviceCount)
+	}()
 	var client http.Client
 	var resp *http.Response
-	for _, host := range Hosts {
-		sUrl := "http://" + host + "/zc-warehouse/v1/getDeviceCount"
-		jbody := []byte(`{"developerId":` + developerIdStr + `}`)
-		var req *http.Request
-		req, err = http.NewRequest("POST", sUrl, bytes.NewBuffer(jbody))
-		req.Header.Set("X-Zc-Developer-Id", fmt.Sprintf("%d", SignDeveloperId))
-		req.Header.Set("X-Zc-Access-Mode", "1")
-		req.Header.Set("X-Zc-Major-Domain", domain)
-		req.Header.Set("X-Zc-Sub-Domain", subDomain)
-		req.Header.Set("Content-Type", "application/x-zc-object")
+	//	for _, host := range Hosts {
+	sUrl := "http://" + host + "/zc-warehouse/v1/getDeviceCount"
+	jbody := []byte(`{"developerId":` + developerIdStr + `}`)
+	var req *http.Request
+	req, err = http.NewRequest("POST", sUrl, bytes.NewBuffer(jbody))
+	req.Header.Set("X-Zc-Developer-Id", fmt.Sprintf("%d", SignDeveloperId))
+	req.Header.Set("X-Zc-Access-Mode", "1")
+	req.Header.Set("X-Zc-Major-Domain", domain)
+	req.Header.Set("X-Zc-Sub-Domain", subDomain)
+	req.Header.Set("Content-Type", "application/x-zc-object")
 
-		resp, err = client.Do(req)
-		if err != nil {
-			//TODO 检查error
-			log.Fatalf("[%s] send request failed: err[%v]\n", host, err)
-			return
-		}
-		traceId := resp.Header.Get("X-Zc-Trace-Id")
-		defer resp.Body.Close()
-		var respBody []byte
-		respBody, err = ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return
-		}
-		msgName := resp.Header.Get("X-Zc-Msg-Name")
-		if msgName == "X-Zc-Err" {
-			//TODO 请求错误
-			log.Warningf("TraceId[%s], [%s] get result failed: err[%v]\n", traceId, host, string(respBody))
-			errMsg, _, perr := ParseError(respBody)
-			if perr != nil {
-				break
-			}
-			err = errors.New(errMsg)
-			acErr = respBody
-			return
-		}
-		var res map[string]interface{}
-		err = json.Unmarshal(respBody, &res)
-		if err != nil {
-			return
-		}
-		count = GetInt(res["count"])
-		deviceCount = GetInt(res["deviceCount"])
+	resp, err = client.Do(req)
+	if err != nil {
+		//TODO 检查error
+		log.Fatalf("[%s] send request failed: err[%v]\n", host, err)
+		return
 	}
+	traceId := resp.Header.Get("X-Zc-Trace-Id")
+	defer resp.Body.Close()
+	var respBody []byte
+	respBody, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	msgName := resp.Header.Get("X-Zc-Msg-Name")
+	if msgName == "X-Zc-Err" {
+		//TODO 请求错误
+		log.Warningf("TraceId[%s], [%s] get result failed: err[%v]\n", traceId, host, string(respBody))
+		errMsg, _, perr := ParseError(respBody)
+		if perr != nil {
+			return
+		}
+		err = errors.New(errMsg)
+		acErr = respBody
+		return
+	}
+	var res map[string]interface{}
+	err = json.Unmarshal(respBody, &res)
+	if err != nil {
+		return
+	}
+	count = GetInt(res["count"])
+	deviceCount = GetInt(res["deviceCount"])
+	//	}
 	return
 }
 
@@ -438,12 +460,8 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 	var amp AllMajorInfo
 
 	domain, domainId, developerId, acErr, err := getMajorDomain(r)
-	if err != nil {
+	if err != nil && domain == "" || developerId <= 0 || domainId <= 0 {
 		writeError(acErr, w)
-		return
-	}
-	if domainId <= 0 || domain == "" {
-		writeError(nil, w)
 		return
 	}
 	amp.MajorInfo.MajorDomainId = domainId
@@ -452,14 +470,14 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 	developerIdStr := fmt.Sprintf("%d", developerId)
 
 	company, acErr, err := getDeveloper(r, domain, fmt.Sprintf("%d", developerId))
-	if err != nil {
+	if err != nil && company == "" {
 		writeError(acErr, w)
 		return
 	}
 	amp.MajorInfo.CompanyName = company
 
 	accounts, acErr, err := getAccountCount(r, domain, fmt.Sprintf("%d", developerId))
-	if err != nil {
+	if err != nil && accounts <= 0 {
 		writeError(acErr, w)
 		return
 	}
@@ -467,7 +485,7 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 
 	//var projects []lcommon.ProjectEntry
 	allProjects, acErr, err := getAllProjects(r, domain, fmt.Sprintf("%d", developerId))
-	if err != nil {
+	if err != nil && len(allProjects) <= 0 {
 		writeError(acErr, w)
 		return
 	}
