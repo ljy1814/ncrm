@@ -499,11 +499,13 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 	amp.MajorInfo.AccountCount = accounts
 
 	//var projects []lcommon.ProjectEntry
-	allProjects, acErr, err := getAllProjects(r, domain, fmt.Sprintf("%d", developerId))
-	if err != nil && len(allProjects) <= 0 {
-		writeError(acErr, w)
-		return
-	}
+	allProjects, _, _ := getAllProjects(r, domain, fmt.Sprintf("%d", developerId))
+	/*	allProjects, acErr, err := getAllProjects(r, domain, fmt.Sprintf("%d", developerId))
+		if err != nil && len(allProjects) <= 0 {
+			writeError(acErr, w)
+			return
+		}
+	*/
 	//TODO 暂时还在测试获取所属环境的接口
 	//　所有环境的产品
 	for k, projects := range allProjects {
@@ -513,23 +515,24 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 			pi.ProductName = v.Name
 			pi.SubDomainId = v.SubDomainId
 			subDomainIdStr := strconv.Itoa(int(v.SubDomainId))
-			subDm, acErr, err := getSubDomain(r, Hosts[k], domain, subDomainIdStr, developerIdStr)
+			subDm, _, err := getSubDomain(r, Hosts[k], domain, subDomainIdStr, developerIdStr)
 			if err != nil {
 				//writeError(acErr, w)
 				//return
 				continue
 			}
 			//			plm, err := this.productClient.GetProduct(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
-			plm, acErr, err := getProduct(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
+			plm, _, err := getProduct(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
 			if err != nil {
-				log.WarningfT(nil, "get product failed: domain[%s], subdomain[%d], developerId[%d] err[%v]", domain, pi.SubDomainId, developerId, err)
-				writeError(acErr, w)
-				return
+				//				log.WarningfT(nil, "get product failed: domain[%s], subdomain[%d], developerId[%d] err[%v]", domain, pi.SubDomainId, developerId, err)
+				//				writeError(acErr, w)
+				//				return
+				continue
 			}
 			pi.LicenseMode = plm.LicenseMode
 			//TODO 错误处理,直接忽略?
 			//	lq, err := this.warehouseClient.GetLicenseQuota(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
-			lq, acErr, err := getLicenseQuota(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
+			lq, _, err := getLicenseQuota(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
 			amp.MajorInfo.AllLicenseCount += lq.QuotaTotal
 			amp.MajorInfo.AllLicenseAllocated += lq.QuotaUsed
 			if err != nil {
@@ -541,7 +544,7 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 			}
 
 			//			count, activeCount, err := this.warehouseClient.GetDeviceCount(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
-			count, activeCount, acErr, err := getDeviceCount(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
+			count, activeCount, _, err := getDeviceCount(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
 			amp.MajorInfo.AllDeviceImport += count
 			amp.MajorInfo.AllDeviceActived += activeCount
 			if err != nil {
