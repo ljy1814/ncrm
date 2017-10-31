@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"sort"
 	"strconv"
 )
 
@@ -564,6 +565,7 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
+	sort.Sort(amp.Products)
 	jamp, err := json.Marshal(amp)
 	if err != nil {
 		writeError([]byte(err.Error()), w)

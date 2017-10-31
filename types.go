@@ -37,9 +37,11 @@ type ProductInfo struct {
 	Environment      string `json:"environment"`
 }
 
+type Products []*ProductInfo
 type AllMajorInfo struct {
 	MajorInfo `json:"major"`
-	Products  []*ProductInfo `json:"products"`
+	//Products  []*ProductInfo `json:"products"`
+	Products `json:"products"`
 }
 
 type Product struct {
@@ -79,4 +81,16 @@ type LicenseQuotaInfo struct {
 	QuotaTotal   int64 `json:"quotaTotal"`
 	QuotaRemains int64 `json:"quotaRemains"`
 	QuotaUsed    int64 `json:"quotaUsed"`
+}
+
+func (ps Products) Len() int {
+	return len(ps)
+}
+
+func (ps Products) Swap(i, j int) {
+	ps[i], ps[j] = ps[j], ps[i]
+}
+
+func (ps Products) Less(i, j int) bool {
+	return ps[i].SubDomainId < ps[j].SubDomainId
 }
