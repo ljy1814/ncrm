@@ -19,30 +19,16 @@ func NewDomainHandler() *DomainHandler {
 	return &DomainHandler{}
 }
 
-func getMajorDomain(r *http.Request) (majorDomain string, majorDomainId, developerId int64, acErr []byte, err error) {
-	if r.Method != "POST" {
-		return
-	}
+func getMajorDomain(majorId int64) (majorDomain string, majorDomainId, developerId int64, acErr []byte, err error) {
 	defer func() {
 		log.Infof("get result : majorDomain=%v , majorDomainId = %v , developerId=%v\n", majorDomain, majorDomainId, developerId)
 	}()
 	var client http.Client
 	var resp *http.Response
-	var reqBody []byte
-	reqBody, err = ioutil.ReadAll(r.Body)
-	if err != nil {
-		return
-	}
-	var rbody map[string]interface{}
-	err = json.Unmarshal(reqBody, &rbody)
-	if err != nil {
-		return
-	}
-	majorDomainId = GetInt(rbody["majorDomainId"])
 	for _, host := range Hosts {
 		sUrl := "http://" + host + "/zc-platform/v1/getMajorDomain"
 		var req *http.Request
-		jbody := []byte(`{"majorDomainId":` + fmt.Sprintf("%d", majorDomainId) + `}`)
+		jbody := []byte(`{"majorDomainId":` + fmt.Sprintf("%d", majorId) + `}`)
 		req, err = http.NewRequest("POST", sUrl, bytes.NewBuffer(jbody))
 		req.Header.Set("X-Zc-Developer-Id", "0")
 		req.Header.Set("X-Zc-Access-Mode", "1")
@@ -85,10 +71,8 @@ func getMajorDomain(r *http.Request) (majorDomain string, majorDomainId, develop
 	}
 	return
 }
-func getDeveloper(r *http.Request, domain, developerIdStr string) (company string, acErr []byte, err error) {
-	if r.Method != "POST" {
-		return
-	}
+
+func getDeveloper(domain, developerIdStr string) (company string, acErr []byte, err error) {
 	defer func() {
 		log.Infof("get result : company=%v\n", company)
 	}()
@@ -140,10 +124,7 @@ func getDeveloper(r *http.Request, domain, developerIdStr string) (company strin
 	return
 }
 
-func getAllProjects(r *http.Request, domain, developerIdStr string) (allInfo map[int64][]ProjectEntry, acErr []byte, err error) {
-	if r.Method != "POST" {
-		return
-	}
+func getAllProjects(domain, developerIdStr string) (allInfo map[int64][]ProjectEntry, acErr []byte, err error) {
 	var client http.Client
 	var resp *http.Response
 	allInfo = make(map[int64][]ProjectEntry)
@@ -194,10 +175,7 @@ func getAllProjects(r *http.Request, domain, developerIdStr string) (allInfo map
 	}
 	return
 }
-func getAccountCount(r *http.Request, domain, developerIdStr string) (accountCount int64, acErr []byte, err error) {
-	if r.Method != "POST" {
-		return
-	}
+func getAccountCount(domain, developerIdStr string) (accountCount int64, acErr []byte, err error) {
 	defer func() {
 		log.Infof("get result : account = %v\n", accountCount)
 	}()
@@ -246,10 +224,7 @@ func getAccountCount(r *http.Request, domain, developerIdStr string) (accountCou
 	}
 	return
 }
-func getProduct(r *http.Request, host, domain, subDomain, developerIdStr string) (product Product, acErr []byte, err error) {
-	if r.Method != "POST" {
-		return
-	}
+func getProduct(host, domain, subDomain, developerIdStr string) (product Product, acErr []byte, err error) {
 	defer func() {
 		log.Infof("get result : product = %v\n", product)
 	}()
@@ -299,16 +274,13 @@ func getProduct(r *http.Request, host, domain, subDomain, developerIdStr string)
 	}
 	return
 }
-func getLicenseQuota(r *http.Request, host, domain, subDomain, developerIdStr string) (lq LicenseQuotaInfo, acErr []byte, err error) {
-	if r.Method != "POST" {
-		return
-	}
+func getLicenseQuota(host, domain, subDomain, developerIdStr string) (lq StockStatisticsInfo, acErr []byte, err error) {
 	defer func() {
 		log.Infof("get result : licenseQuoraInfo =　%v\n", lq)
 	}()
 	var client http.Client
 	var resp *http.Response
-	sUrl := "http://" + host + "/zc-warehouse/v1/getLicenseQuota"
+	sUrl := "http://" + host + "/zc-warehouse/v1/stockStatistics"
 	var req *http.Request
 	req, err = http.NewRequest("POST", sUrl, nil)
 	req.Header.Set("X-Zc-Developer-Id", developerIdStr)
@@ -348,7 +320,7 @@ func getLicenseQuota(r *http.Request, host, domain, subDomain, developerIdStr st
 	}
 	return
 }
-func getSubDomain(r *http.Request, host, domain, subDomain, developerIdStr string) (info SubDomainEntry, acErr []byte, err error) {
+func getSubDomain(host, domain, subDomain, developerIdStr string) (info SubDomainEntry, acErr []byte, err error) {
 	sUrl := "http://" + host + "/zc-platform/v1/getSubDomain"
 	jbody := []byte(`{"subDomainId":` + subDomain + `}`)
 	defer func() {
@@ -397,10 +369,7 @@ func getSubDomain(r *http.Request, host, domain, subDomain, developerIdStr strin
 	return
 }
 
-func getDeviceCount(r *http.Request, host, domain, subDomain, developerIdStr string) (count, deviceCount int64, acErr []byte, err error) {
-	if r.Method != "POST" {
-		return
-	}
+func getDeviceCount(host, domain, subDomain, developerIdStr string) (count, deviceCount int64, acErr []byte, err error) {
 	defer func() {
 		log.Infof("get result : count = %v , deviceCount = %v\n", count, deviceCount)
 	}()
@@ -454,6 +423,9 @@ func getDeviceCount(r *http.Request, host, domain, subDomain, developerIdStr str
 }
 
 func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		return
+	}
 	if !checkContext(r) {
 		writeError([]byte("bad signature"), w)
 		return
@@ -463,6 +435,19 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 		writeError([]byte("invalid environment"), w)
 		return
 	}
+
+	var reqBody []byte
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return
+	}
+	var rbody map[string]interface{}
+	err = json.Unmarshal(reqBody, &rbody)
+	if err != nil {
+		return
+	}
+	majorDomainId := GetInt(rbody["majorDomainId"])
+
 	Hosts = make(map[int64]string)
 	if env == ENV_SANDBOX {
 		Hosts = map[int64]string{1: CrmConf.Servers[1]}
@@ -475,7 +460,7 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 	}
 	var amp AllMajorInfo
 
-	domain, domainId, developerId, acErr, err := getMajorDomain(r)
+	domain, domainId, developerId, acErr, err := getMajorDomain(majorDomainId)
 	if err != nil && domain == "" || developerId <= 0 || domainId <= 0 {
 		writeError(acErr, w)
 		return
@@ -485,14 +470,14 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 
 	developerIdStr := fmt.Sprintf("%d", developerId)
 
-	company, acErr, err := getDeveloper(r, domain, fmt.Sprintf("%d", developerId))
+	company, acErr, err := getDeveloper(domain, fmt.Sprintf("%d", developerId))
 	if err != nil && company == "" {
 		writeError(acErr, w)
 		return
 	}
 	amp.MajorInfo.CompanyName = company
 
-	accounts, acErr, err := getAccountCount(r, domain, fmt.Sprintf("%d", developerId))
+	accounts, acErr, err := getAccountCount(domain, fmt.Sprintf("%d", developerId))
 	if err != nil && accounts <= 0 {
 		writeError(acErr, w)
 		return
@@ -500,7 +485,7 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 	amp.MajorInfo.AccountCount = accounts
 
 	//var projects []lcommon.ProjectEntry
-	allProjects, _, _ := getAllProjects(r, domain, fmt.Sprintf("%d", developerId))
+	allProjects, _, _ := getAllProjects(domain, fmt.Sprintf("%d", developerId))
 	/*	allProjects, acErr, err := getAllProjects(r, domain, fmt.Sprintf("%d", developerId))
 		if err != nil && len(allProjects) <= 0 {
 			writeError(acErr, w)
@@ -516,14 +501,14 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 			pi.ProductName = v.Name
 			pi.SubDomainId = v.SubDomainId
 			subDomainIdStr := strconv.Itoa(int(v.SubDomainId))
-			subDm, _, err := getSubDomain(r, Hosts[k], domain, subDomainIdStr, developerIdStr)
+			subDm, _, err := getSubDomain(Hosts[k], domain, subDomainIdStr, developerIdStr)
 			if err != nil {
 				//writeError(acErr, w)
 				//return
 				continue
 			}
 			//			plm, err := this.productClient.GetProduct(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
-			plm, _, err := getProduct(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
+			plm, _, err := getProduct(Hosts[k], domain, subDm.SubDomain, developerIdStr)
 			if err != nil {
 				//				log.WarningfT(nil, "get product failed: domain[%s], subdomain[%d], developerId[%d] err[%v]", domain, pi.SubDomainId, developerId, err)
 				//				writeError(acErr, w)
@@ -533,32 +518,38 @@ func (this *DomainHandler) handleListDomain(w http.ResponseWriter, r *http.Reque
 			pi.LicenseMode = plm.LicenseMode
 			//TODO 错误处理,直接忽略?
 			//	lq, err := this.warehouseClient.GetLicenseQuota(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
-			lq, _, err := getLicenseQuota(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
-			amp.MajorInfo.AllLicenseCount += lq.QuotaTotal
-			amp.MajorInfo.AllLicenseAllocated += lq.QuotaUsed
+			lq, _, err := getLicenseQuota(Hosts[k], domain, subDm.SubDomain, developerIdStr)
+			amp.MajorInfo.AllLicenseCount += lq.QuotaCount
+			amp.MajorInfo.AllLicenseAllocated += lq.StockCount
+			amp.MajorInfo.AllDeviceImport += lq.StockCount
+			amp.MajorInfo.AllDeviceActived += lq.ActiveCount
 			if err != nil {
 				//				writeError(acErr, w)
 				//		return
 				pi.LicenseAllocated = -1
-			} else {
-				pi.LicenseAllocated = lq.QuotaUsed
-			}
-
-			//			count, activeCount, err := this.warehouseClient.GetDeviceCount(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
-			count, activeCount, _, err := getDeviceCount(r, Hosts[k], domain, subDm.SubDomain, developerIdStr)
-			amp.MajorInfo.AllDeviceImport += count
-			amp.MajorInfo.AllDeviceActived += activeCount
-			if err != nil {
-				//				writeError(acErr, w)
-				//				return
-
 				pi.DeviceImport = -1
 				pi.DeviceActived = -1
 			} else {
-				pi.DeviceImport = count
-				pi.DeviceActived = activeCount
+				pi.LicenseAllocated = lq.QuotaCount
+				pi.DeviceImport = lq.StockCount
+				pi.DeviceActived = lq.ActiveCount
 			}
+			/*
+				//			count, activeCount, err := this.warehouseClient.GetDeviceCount(req, client.Hosts[k], domainIdStr, subDomainIdStr, developerId)
+				count, activeCount, _, err := getDeviceCount(Hosts[k], domain, subDm.SubDomain, developerIdStr)
+				amp.MajorInfo.AllDeviceImport += count
+				amp.MajorInfo.AllDeviceActived += activeCount
+				if err != nil {
+					//				writeError(acErr, w)
+					//				return
 
+					pi.DeviceImport = -1
+					pi.DeviceActived = -1
+				} else {
+					pi.DeviceImport = count
+					pi.DeviceActived = activeCount
+				}
+			*/
 			pi.Environment = envs[k]
 			//TODO 环境
 			amp.Products = append(amp.Products, &pi)

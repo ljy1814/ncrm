@@ -77,10 +77,10 @@ type SubDomainEntry struct {
 	SubDomain   string `json:"subDomain"`
 }
 
-type LicenseQuotaInfo struct {
-	QuotaTotal   int64 `json:"quotaTotal"`
-	QuotaRemains int64 `json:"quotaRemains"`
-	QuotaUsed    int64 `json:"quotaUsed"`
+type StockStatisticsInfo struct {
+	QuotaCount  int64 `json:"quotaCount"`
+	StockCount  int64 `json:"stockCount"`
+	ActiveCount int64 `json:"activeCount"`
 }
 
 func (ps Products) Len() int {
